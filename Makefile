@@ -83,6 +83,7 @@ test-coverage: fmt lint test-coverage-tools ; $(info $(M) running coverage tests
 
 .PHONY: lint
 lint: | $(GOLINT) ; $(info $(M) running golint…  $Q $(GOLINT) -set_exit_status $(PKGS)) @ ## Run golint
+	@rm -f $(basename $(MODULE))
 	$Q $(GOLINT) -set_exit_status $(PKGS)
 
 .PHONY: fmt
