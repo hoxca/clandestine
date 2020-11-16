@@ -37,12 +37,14 @@ type logevent struct {
 
 type method struct {
 	Method string `json:"method"`
-	Params struct {
-		UID   string `json:"UID"`
-		IsOn  bool   `json:"IsOn"`
-		Level int    `json:"Level"`
-	} `json:"params"`
-	ID int `json:"id"`
+	Params params `json:"params"`
+	ID     int    `json:"id"`
+}
+
+type params struct {
+	UID   string `json:"UID"`
+	IsOn  bool   `json:"IsOn"`
+	Level *int   `json:"Level,omitempty"`
 }
 
 func main() {
@@ -53,9 +55,9 @@ func main() {
 	defer c.Close()
 
 	quit := make(chan bool)
-
 	go recvFromVoyager(c, quit)
 	askForLog(c)
+	remoteSetDashboard(c)
 	heartbeatVoyager(c, quit)
 
 }
@@ -105,13 +107,7 @@ func heartbeatVoyager(c *websocket.Conn, quit chan bool) {
 					Inst:      1,
 				}
 				data, _ := json.Marshal(heartbeat)
-
-				err := c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("%s\r\n", data)))
-				if err != nil {
-					log.Println("write:", err)
-					return
-				}
-				log.Printf("send: %s", string(data))
+				writeToWebsocket(c, data)
 			}
 		case <-interrupt:
 			// Close the read goroutine
@@ -141,14 +137,50 @@ func connectVoyager(addr *string) *websocket.Conn {
 }
 
 func askForLog(c *websocket.Conn) {
-	uid := uuid.Must(uuid.NewV4())
-	params := fmt.Sprintf("{\"UID\":\"%s\",\"IsOn\":true,\"Level\":0}", uid)
-	asklog := fmt.Sprintf("{\"method\":\"RemoteSetLogEvent\",\"params\":%s,\"id\":1}\r\n", params)
 
-	err := c.WriteMessage(websocket.TextMessage, []byte(asklog))
+	time.Sleep(1 * time.Second)
+	level := 0
+	p := &params{
+		UID:   fmt.Sprintf("%s", uuid.Must(uuid.NewV4())),
+		IsOn:  true,
+		Level: &level,
+	}
+
+	askLog := &method{
+		Method: "RemoteSetLogEvent",
+		Params: *p,
+		ID:     1,
+	}
+
+	data, _ := json.Marshal(askLog)
+	writeToWebsocket(c, data)
+}
+
+func remoteSetDashboard(c *websocket.Conn) {
+
+	time.Sleep(2 * time.Second)
+
+	p := &params{
+		UID:  fmt.Sprintf("%s", uuid.Must(uuid.NewV4())),
+		IsOn: true,
+	}
+
+	setDashboard := &method{
+		Method: "RemoteSetDashboardMode",
+		Params: *p,
+		ID:     2,
+	}
+
+	data, _ := json.Marshal(setDashboard)
+	writeToWebsocket(c, data)
+}
+
+func writeToWebsocket(c *websocket.Conn, data []byte) {
+
+	err := c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("%s\r\n", data)))
 	if err != nil {
 		log.Println("write:", err)
 		return
 	}
-	log.Printf("send: %s", asklog)
+	log.Printf("send: %s", data)
 }
