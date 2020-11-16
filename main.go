@@ -9,35 +9,63 @@ import (
 	"os/signal"
 	"time"
 
+	"encoding/json"
+
 	"github.com/gofrs/uuid"
 	"github.com/gorilla/websocket"
 )
 
 var addr = flag.String("addr", "192.168.0.48:5950", "http service address")
+var heartbeat event
+
+type event struct {
+	Event     string  `json:"Event"`
+	Timestamp float64 `json:"Timestamp"`
+	Host      string  `json:"Host,omitempty"`
+	Inst      int     `json:"Inst"`
+}
+
+type logevent struct {
+	Event     string  `json:"Event"`
+	Timestamp float64 `json:"Timestamp"`
+	Host      string  `json:"Host"`
+	Inst      int     `json:"Inst"`
+	TimeInfo  float64 `json:"TimeInfo"`
+	Type      int     `json:"Type"`
+	Text      string  `json:"Text"`
+}
+
+type method struct {
+	Method string `json:"method"`
+	Params struct {
+		UID   string `json:"UID"`
+		IsOn  bool   `json:"IsOn"`
+		Level int    `json:"Level"`
+	} `json:"params"`
+	ID int `json:"id"`
+}
 
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
 
-	lastpoll := time.Now()
-
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/"}
-	log.Printf("connecting to %s", u.String())
-
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Fatal("dial:", err)
-	}
+	c := connectVoyager(addr)
 	defer c.Close()
 
-	done := make(chan struct{})
+	quit := make(chan bool)
 
-	go func() {
-		defer close(done)
-		for {
+	go recvFromVoyager(c, quit)
+	askForLog(c)
+	heartbeatVoyager(c, quit)
+
+}
+
+func recvFromVoyager(c *websocket.Conn, quit chan bool) {
+	for {
+		select {
+		case <-quit:
+			return
+		default:
 			_, message, err := c.ReadMessage()
 			if err != nil {
 				log.Println("read:", err)
@@ -45,17 +73,16 @@ func main() {
 			}
 			log.Printf("recv: %s", message)
 		}
-	}()
-
-	uid := uuid.Must(uuid.NewV4())
-	params := fmt.Sprintf("{\"UID\":\"%s\",\"IsOn\":true,\"Level\":0}", uid)
-	asklog := fmt.Sprintf("{\"method\":\"RemoteSetLogEvent\",\"params\":%s,\"id\":2}\r\n", params)
-	err = c.WriteMessage(websocket.TextMessage, []byte(asklog))
-	if err != nil {
-		log.Println("write:", err)
-		return
 	}
-	log.Printf("send: %s", asklog)
+}
+
+func heartbeatVoyager(c *websocket.Conn, quit chan bool) {
+
+	done := make(chan struct{})
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
+	lastpoll := time.Now()
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -68,35 +95,60 @@ func main() {
 			now := t
 			elapsed := now.Sub(lastpoll)
 
+			// manage heartbeat
 			if elapsed.Seconds() > 5 {
 				lastpoll = now
 				secs := now.Unix()
+				heartbeat := &event{
+					Event:     "Polling",
+					Timestamp: float64(secs),
+					Inst:      1,
+				}
+				data, _ := json.Marshal(heartbeat)
 
-				heartbeat := fmt.Sprintf("{\"Event\":\"Polling\",\"Timestamp\":%d,\"Inst\":1}\r\n", int(secs))
-				err := c.WriteMessage(websocket.TextMessage, []byte(heartbeat))
+				err := c.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("%s\r\n", data)))
 				if err != nil {
 					log.Println("write:", err)
 					return
 				}
-				log.Printf("send: %s", heartbeat)
+				log.Printf("send: %s", string(data))
 			}
-
-			log.Println("skip")
 		case <-interrupt:
-			log.Println("interrupt1")
-
-			// Cleanly close the connection by sending a close message and then
-			// waiting (with timeout) for the server to close the connection.
+			// Close the read goroutine
+			quit <- true
+			// Cleanly close the websocket connection by sending a close message
 			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			if err != nil {
 				log.Println("write close:", err)
 				return
 			}
-			select {
-			case <-done:
-			case <-time.After(time.Second):
-			}
+			fmt.Println("Shutdown clandestine")
 			return
 		}
 	}
+}
+
+func connectVoyager(addr *string) *websocket.Conn {
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/"}
+	log.Printf("connecting to %s", u.String())
+
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Printf("Can't connect, verify Voyager address or tcp port in the Voyager configuration")
+		log.Fatal("Critical: ", err)
+	}
+	return c
+}
+
+func askForLog(c *websocket.Conn) {
+	uid := uuid.Must(uuid.NewV4())
+	params := fmt.Sprintf("{\"UID\":\"%s\",\"IsOn\":true,\"Level\":0}", uid)
+	asklog := fmt.Sprintf("{\"method\":\"RemoteSetLogEvent\",\"params\":%s,\"id\":1}\r\n", params)
+
+	err := c.WriteMessage(websocket.TextMessage, []byte(asklog))
+	if err != nil {
+		log.Println("write:", err)
+		return
+	}
+	log.Printf("send: %s", asklog)
 }
