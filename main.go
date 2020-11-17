@@ -18,7 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "192.168.0.48:5950", "http service address")
+var addr = flag.String("addr", "127.0.0.1:5950", "http service address")
 var logdir = flag.String("dir", "log", "log directory, default log in program directory")
 var verbosity = flag.String("level", "warn", "set log level of clandestine default warn")
 var heartbeat event
@@ -92,7 +92,7 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 		*logdir = fmt.Sprintf("%s/../log", dir)
 	}
 
-	logFilename := fmt.Sprintf("%s/MonitorLog_%s.log", *logdir, logday)
+	logFilename := fmt.Sprintf("%s/%s_Monitor.log", *logdir, logday)
 	fmt.Printf("Clandestine log to: %s\n", logFilename)
 
 	logfile, err := os.OpenFile(logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
