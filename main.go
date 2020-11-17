@@ -91,10 +91,10 @@ func launcher() {
 	}
 	Log.Printf("run %s\n", pname)
 	if processAlreadyRunning(pname) {
-		Log.Printf("Ok, %s is already running !\n", strings.TrimRight(pname, ".exe"))
+		Log.Println("Ok, Clandestine is already running !")
 		os.Exit(0)
 	}
-	Log.Printf("launching %s ...\n", strings.TrimRight(pname, ".exe"))
+	Log.Println("launching Clandestine ...")
 }
 
 func createLogfile(logFilename string, rotate bool) *os.File {
@@ -109,7 +109,6 @@ func createLogfile(logFilename string, rotate bool) *os.File {
 		}
 		fmt.Printf("Clandestine log to: %s\n", logFilename)
 	}
-	defer logfile.Close()
 
 	return logfile
 }
@@ -129,7 +128,7 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 	logFilename := fmt.Sprintf("%s/%s_Monitor.log", *logdir, logday)
 	logdayCurrent := logday
 	logfile := createLogfile(logFilename, false)
-	logfile.Sync()
+	defer logfile.Close()
 	logger := log.New(logfile, "", log.LstdFlags)
 
 	for {
@@ -152,6 +151,7 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 				logFilename := fmt.Sprintf("%s/%s_Monitor.log", *logdir, logday)
 				logdayCurrent = logday
 				logfile := createLogfile(logFilename, false)
+				defer logfile.Close()
 				logger = log.New(logfile, "", log.LstdFlags)
 			}
 
