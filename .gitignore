@@ -3,4 +3,5 @@ bin/
 tmp/
 .env
 notes
+log/*
 
