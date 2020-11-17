@@ -97,9 +97,25 @@ func launcher() {
 	Log.Printf("launching %s ...\n", strings.TrimRight(pname, ".exe"))
 }
 
+func createLogfile(logFilename string, rotate bool) *os.File {
+	logfile, err := os.OpenFile(logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		Log.Fatal(err)
+	} else {
+		if rotate {
+			Log.Println("Ok, Rotate Clandestine log")
+		} else {
+			Log.Println("Ok, Clandestine is launched")
+		}
+		fmt.Printf("Clandestine log to: %s\n", logFilename)
+	}
+	defer logfile.Close()
+
+	return logfile
+}
+
 func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 
-	logday := currentDateLog()
 	if *logdir == "log" {
 		// Switch to default program path
 		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
@@ -109,17 +125,11 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 		*logdir = fmt.Sprintf("%s/../log", dir)
 	}
 
+	logday := currentDateLog()
 	logFilename := fmt.Sprintf("%s/%s_Monitor.log", *logdir, logday)
-	fmt.Printf("Clandestine log to: %s\n", logFilename)
-
-	logfile, err := os.OpenFile(logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		Log.Fatal(err)
-	} else {
-		Log.Println("Ok, Clandestine is launched")
-	}
-	defer logfile.Close()
-
+	logdayCurrent := logday
+	logfile := createLogfile(logFilename, false)
+	logfile.Sync()
 	logger := log.New(logfile, "", log.LstdFlags)
 
 	for {
@@ -133,6 +143,19 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 				return
 			}
 
+			// manage log file rotation
+			logday := currentDateLog()
+			if logday != logdayCurrent {
+				Log.Printf("We need log a rotation !")
+				logfile.Sync()
+				logfile.Close()
+				logFilename := fmt.Sprintf("%s/%s_Monitor.log", *logdir, logday)
+				logdayCurrent = logday
+				logfile := createLogfile(logFilename, false)
+				logger = log.New(logfile, "", log.LstdFlags)
+			}
+
+			// parse incoming message
 			msg := string(message)
 			switch {
 			case strings.Contains(msg, `"Event":"ControlData"`):
