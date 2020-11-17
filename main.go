@@ -20,7 +20,7 @@ import (
 	ps "github.com/mitchellh/go-ps"
 )
 
-var addr = flag.String("addr", "127.0.0.1:5950", "http service address")
+var addr = flag.String("addr", "127.0.0.1:5950", "voyager tcp server address")
 var logdir = flag.String("dir", "log", "log directory, default log in program directory")
 var verbosity = flag.String("level", "warn", "set log level of clandestine default warn")
 var heartbeat event
