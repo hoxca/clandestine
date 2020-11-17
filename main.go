@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 	_ "time/tzdata"
@@ -16,6 +17,7 @@ import (
 	Log "github.com/apatters/go-conlog"
 	"github.com/gofrs/uuid"
 	"github.com/gorilla/websocket"
+	ps "github.com/mitchellh/go-ps"
 )
 
 var addr = flag.String("addr", "127.0.0.1:5950", "http service address")
@@ -69,6 +71,7 @@ type params struct {
 func main() {
 	flag.Parse()
 	setUpLogs()
+	launcher()
 
 	c := connectVoyager(addr)
 	defer c.Close()
@@ -78,6 +81,20 @@ func main() {
 	askForLog(c)
 	remoteSetDashboard(c)
 	heartbeatVoyager(c, quit)
+}
+
+func launcher() {
+	// exit if process is already running
+	pname := "clandestine"
+	if runtime.GOOS == "windows" {
+		pname = "clandestine.exe"
+	}
+	Log.Printf("run %s\n", pname)
+	if processAlreadyRunning(pname) {
+		Log.Printf("Ok, %s is already running !\n", strings.TrimRight(pname, ".exe"))
+		os.Exit(0)
+	}
+	Log.Printf("launching %s ...\n", strings.TrimRight(pname, ".exe"))
 }
 
 func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
@@ -98,6 +115,8 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 	logfile, err := os.OpenFile(logFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		Log.Fatal(err)
+	} else {
+		Log.Println("Ok, Clandestine is launched")
 	}
 	defer logfile.Close()
 
@@ -133,6 +152,18 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 			}
 		}
 	}
+}
+
+func processAlreadyRunning(pname string) bool {
+	pid := os.Getpid()
+	process, _ := ps.Processes()
+	for _, p := range process {
+		if p.Executable() == pname && p.Pid() != pid {
+			fmt.Printf("%s: %d\n", p.Executable(), p.Pid())
+			return true
+		}
+	}
+	return false
 }
 
 func parseLogEvent(message []byte) (float64, string, string) {
