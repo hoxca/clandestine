@@ -24,6 +24,7 @@ var addr = flag.String("addr", "127.0.0.1:5950", "voyager tcp server address")
 var logdir = flag.String("dir", "log", "log directory, default log in program directory")
 var verbosity = flag.String("level", "warn", "set log level of clandestine default warn")
 var heartbeat event
+var counterr = 0
 
 type loglevel int
 
@@ -139,6 +140,7 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 			_, message, err := c.ReadMessage()
 			if err != nil {
 				Log.Println("read:", err)
+				logfile.Sync()
 				return
 			}
 
@@ -262,6 +264,10 @@ func heartbeatVoyager(c *websocket.Conn, quit chan bool) {
 			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			if err != nil {
 				Log.Println("write close:", err)
+				counterr++
+				if counterr > 2 {
+					os.Exit(1)
+				}
 				return
 			}
 			Log.Println("Shutdown clandestine")
