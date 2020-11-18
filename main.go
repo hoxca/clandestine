@@ -92,10 +92,10 @@ func launcher() {
 	}
 	Log.Printf("run %s\n", pname)
 	if processAlreadyRunning(pname) {
-		Log.Println("Ok, Clandestine is already running !")
+		fmt.Println("Ok, Clandestine is already running !")
 		os.Exit(0)
 	}
-	Log.Println("launching Clandestine ...")
+	fmt.Printf("launching Clandestine ...")
 }
 
 func createLogfile(logFilename string, rotate bool) *os.File {
@@ -141,6 +141,7 @@ func recvFromVoyager(c *websocket.Conn, logdir *string, quit chan bool) {
 			if err != nil {
 				Log.Println("read:", err)
 				logfile.Sync()
+				os.Exit(1)
 				return
 			}
 
@@ -264,10 +265,6 @@ func heartbeatVoyager(c *websocket.Conn, quit chan bool) {
 			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			if err != nil {
 				Log.Println("write close:", err)
-				counterr++
-				if counterr > 2 {
-					os.Exit(1)
-				}
 				return
 			}
 			Log.Println("Shutdown clandestine")
