@@ -80,7 +80,7 @@ func main() {
 	quit := make(chan bool)
 	go recvFromVoyager(c, logdir, quit)
 	askForLog(c)
-	remoteSetDashboard(c)
+	// remoteSetDashboard(c)
 	heartbeatVoyager(c, quit)
 }
 
