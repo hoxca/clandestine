@@ -18,13 +18,20 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/gorilla/websocket"
 	ps "github.com/mitchellh/go-ps"
+	"github.com/spf13/viper"
 )
 
-var addr = flag.String("addr", "127.0.0.1:5950", "voyager tcp server address")
-var logdir = flag.String("dir", "log", "log directory, default log in program directory")
-var verbosity = flag.String("level", "warn", "set log level of clandestine default warn")
-var heartbeat event
-var counterr = 0
+var (
+	addr      = flag.String("addr", "127.0.0.1:5950", "voyager tcp server address")
+	logdir    = flag.String("dir", "log", "log directory, default log in program directory")
+	verbosity = flag.String("level", "warn", "set log level of clandestine default warn")
+)
+
+var (
+	heartbeat       event
+	counterr        = 0
+	cfgFileNotFound = false
+)
 
 type loglevel int
 
@@ -72,7 +79,7 @@ type params struct {
 func main() {
 	flag.Parse()
 	setUpLogs()
-	launcher()
+	parseConfig()
 
 	c := connectVoyager(addr)
 	defer c.Close()
@@ -82,6 +89,43 @@ func main() {
 	askForLog(c)
 	// remoteSetDashboard(c)
 	heartbeatVoyager(c, quit)
+}
+
+func parseConfig() {
+
+	viper := readConfig()
+	//	launcher()
+	if viper == nil {
+		fmt.Println("null config")
+	}
+
+	if *logdir == "log" && viper.IsSet("voyager.logdir") {
+		viperLogdir := viper.GetString("voyager.logdir")
+		*logdir = viperLogdir
+	}
+
+	var viperVoyAddr string
+	var viperVoyPort int
+
+	if viper.IsSet("voyager.tcpserver.address") {
+		viperVoyAddr = viper.GetString("voyager.tcpserver.address")
+	} else {
+		viperVoyAddr = "127.0.0.1"
+	}
+
+	if viper.IsSet("voyager.tcpserver.port") {
+		viperVoyPort = viper.GetInt("voyager.tcpserver.port")
+	} else {
+		viperVoyPort = 5950
+	}
+
+	if *addr == "127.0.0.1:5950" && (viper.IsSet("voyager.tcpserver.address") || viper.IsSet("voyager.tcpserver.port")) {
+		*addr = fmt.Sprintf("%s:%d", viperVoyAddr, viperVoyPort)
+	}
+
+	fmt.Println("log dir: ", *logdir)
+	fmt.Println("voyager addr: ", *addr)
+
 }
 
 func launcher() {
@@ -366,4 +410,37 @@ func setUpLogs() {
 		Log.SetLevel(Log.WarnLevel)
 	}
 
+}
+
+func readConfig() *viper.Viper {
+	v := viper.New()
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		log.Fatal(err)
+	}
+	confdir := fmt.Sprintf("%s/conf", dir)
+	// if we came from bin directory
+	confdir1 := fmt.Sprintf("%s/../conf", dir)
+	// Search yaml config file in program path with name "insistent.yaml".
+	v.AddConfigPath(confdir)
+	v.AddConfigPath(confdir1)
+	v.SetConfigType("yaml")
+	v.SetConfigName("clandestine")
+	//	}
+
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			cfgFileNotFound = true
+			Log.Debug("Config file not found")
+		} else {
+			Log.Debug("Something look strange")
+			Log.Debugf("error: %v\n", err)
+			Log.Debugf("Using config file: %s", v.ConfigFileUsed())
+			fmt.Printf("Fatal error something look strange in config file")
+			os.Exit(1)
+		}
+	} else {
+		Log.Debugf("Using config file: %s", v.ConfigFileUsed())
+	}
+	return v
 }

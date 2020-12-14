@@ -1,0 +1,5 @@
+voyager:
+  logdir: 'C:\data\log\voyager'
+  tcpserver:
+    address: 127.0.0.1
+    port: 5950
